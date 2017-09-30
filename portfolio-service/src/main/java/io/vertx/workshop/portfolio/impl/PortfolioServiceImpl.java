@@ -1,13 +1,18 @@
 package io.vertx.workshop.portfolio.impl;
 
 import io.vertx.core.*;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.servicediscovery.ServiceDiscovery;
+import io.vertx.servicediscovery.types.HttpEndpoint;
 import io.vertx.workshop.portfolio.Portfolio;
 import io.vertx.workshop.portfolio.PortfolioService;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,8 +35,10 @@ public class PortfolioServiceImpl implements PortfolioService {
 
   @Override
   public void getPortfolio(Handler<AsyncResult<Portfolio>> resultHandler) {
-    // TODO
-    // ----
+    //TODO
+    //----
+
+    resultHandler.handle(Future.succeededFuture(portfolio));
 
     // ----
   }
@@ -39,6 +46,14 @@ public class PortfolioServiceImpl implements PortfolioService {
   private void sendActionOnTheEventBus(String action, int amount, JsonObject quote, int newAmount) {
     // TODO
     // ----
+
+    JsonObject payload = new JsonObject()
+            .put("action", action)
+            .put("quote", quote)
+            .put("date", System.currentTimeMillis())
+            .put("amount", amount)
+            .put("owned", newAmount);
+    vertx.eventBus().publish(EVENT_ADDRESS, payload);
 
     // ----
   }
@@ -48,22 +63,36 @@ public class PortfolioServiceImpl implements PortfolioService {
     // TODO
     // ----
 
+    JsonObject svcFilter = new JsonObject()
+            .put("name", "quotes");
+    HttpEndpoint.getWebClient(discovery, svcFilter, ar -> {
+      if (ar.succeeded()) {
+        computeEvaluation(ar.result(), resultHandler);
+      } else {
+        resultHandler.handle(Future.failedFuture(ar.cause()));
+      }
+    });
+
     // ---
   }
 
   private void computeEvaluation(WebClient webClient, Handler<AsyncResult<Double>> resultHandler) {
     // We need to call the service for each company we own shares
-    List<Future> results = portfolio.getShares().entrySet().stream()
+    List<Future<Double>> results = portfolio.getShares().entrySet().stream()
         .map(entry -> getValueForCompany(webClient, entry.getKey(), entry.getValue()))
         .collect(Collectors.toList());
 
     // We need to return only when we have all results, for this we create a composite future. The set handler
     // is called when all the futures has been assigned.
-    CompositeFuture.all(results).setHandler(
+    compositeFutureAll(results).setHandler(
         ar -> {
-          double sum = results.stream().mapToDouble(fut -> (double) fut.result()).sum();
+          double sum = results.stream().mapToDouble(Future::result).sum();
           resultHandler.handle(Future.succeededFuture(sum));
         });
+  }
+
+  private static <T> CompositeFuture compositeFutureAll(List<Future<T>> futures) {
+    return CompositeFuture.all((List<Future>)(List<?>)futures);
   }
 
   private Future<Double> getValueForCompany(WebClient client, String company, int numberOfShares) {
@@ -72,6 +101,29 @@ public class PortfolioServiceImpl implements PortfolioService {
 
     //TODO
     //----
+
+    client.get("/")
+        .addQueryParam("name", encode(company))
+        .send(ar -> {
+      if (ar.succeeded()) {
+        HttpResponse<Buffer> response = ar.result();
+        if (response.statusCode() == 404) {
+          future.complete(0.0);
+        } else if (response.statusCode() == 200) {
+          JsonObject responseBody = response.bodyAsJson(JsonObject.class);
+          if (responseBody.containsKey("bid")) {
+            Double bid = responseBody.getDouble("bid");
+            future.complete(bid * numberOfShares);
+          } else {
+            future.fail("Unexpected HTTP response body.");
+          }
+        } else {
+          future.fail("HTTP request was unsuccessful.");
+        }
+      } else {
+        future.fail(ar.cause());
+      }
+    });
 
     // ---
 

@@ -1,5 +1,6 @@
 package io.vertx.workshop.quote;
 
+import io.vertx.core.AsyncResult;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -34,7 +35,7 @@ public class GeneratorConfigVerticle extends MicroServiceVerticle {
     vertx.deployVerticle(RestQuoteAPIVerticle.class.getName(), new DeploymentOptions().setConfig(config()));
 
     // Publish the services in the discovery infrastructure.
-    publishMessageSource("market-data", ADDRESS, rec -> {
+    publishMessageSource("market-data", ADDRESS, (AsyncResult<Void> rec) -> {
       if (!rec.succeeded()) {
         rec.cause().printStackTrace();
       }

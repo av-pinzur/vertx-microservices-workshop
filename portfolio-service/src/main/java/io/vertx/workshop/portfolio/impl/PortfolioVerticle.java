@@ -2,6 +2,7 @@ package io.vertx.workshop.portfolio.impl;
 
 import io.vertx.serviceproxy.ProxyHelper;
 import io.vertx.workshop.common.MicroServiceVerticle;
+import io.vertx.workshop.portfolio.PortfolioEvent;
 import io.vertx.workshop.portfolio.PortfolioService;
 
 import static io.vertx.workshop.portfolio.PortfolioService.ADDRESS;
@@ -33,6 +34,14 @@ public class PortfolioVerticle extends MicroServiceVerticle {
 
     // TODO
     //----
+
+    publishMessageSource("portfolio-events", EVENT_ADDRESS, PortfolioEvent.class, ar -> {
+      if (ar.failed()) {
+        ar.cause().printStackTrace();
+      } else {
+        System.out.println("Portfolio event message service published : " + ar.succeeded());
+      }
+    });
 
     //----
   }
